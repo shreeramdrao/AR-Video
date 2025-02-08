@@ -3,80 +3,143 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AR Video Player</title>
+    <title>AR Video Player with Camera Background</title>
 
     <style>
         body {
             margin: 0;
+            overflow: hidden;
             display: flex;
             justify-content: center;
             align-items: center;
             height: 100vh;
+            position: relative;
             background-color: black;
-            overflow: hidden;
         }
 
+        /* Camera Feed */
+        #camera-feed {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            z-index: -1;
+        }
+
+        /* Video Container */
         #video-container {
             position: relative;
-            width: 90vw;
+            width: 80vw;
             max-width: 600px;
+            z-index: 2;
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 10px;
+            overflow: hidden;
         }
 
         video {
             width: 100%;
             border-radius: 10px;
-            box-shadow: 0px 4px 10px rgba(255, 255, 255, 0.3);
         }
 
+        /* Video Controls */
         .controls {
-            position: absolute;
-            bottom: 10px;
-            left: 50%;
-            transform: translateX(-50%);
             display: flex;
-            gap: 10px;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            background: rgba(0, 0, 0, 0.7);
         }
 
         button {
-            background-color: rgba(255, 255, 255, 0.8);
+            background: rgba(255, 255, 255, 0.8);
             border: none;
-            padding: 10px 20px;
+            padding: 10px;
             font-size: 16px;
             border-radius: 5px;
             cursor: pointer;
         }
 
         button:hover {
-            background-color: rgba(255, 255, 255, 1);
+            background: rgba(255, 255, 255, 1);
+        }
+
+        input[type="range"] {
+            flex-grow: 1;
+            margin: 0 10px;
         }
     </style>
 </head>
 <body>
 
+    <!-- Camera Background -->
+    <video id="camera-feed" autoplay playsinline></video>
+
+    <!-- Video Player -->
     <div id="video-container">
-        <!-- Replace this URL with your Vercel-deployed video -->
         <video id="ar-video" playsinline>
             <source src="https://ar-video.vercel.app/assets/4817-180570037_small.mp4" type="video/mp4">
             Your browser does not support the video tag.
         </video>
 
-        <!-- Play/Pause Buttons -->
+        <!-- Controls -->
         <div class="controls">
-            <button onclick="playVideo()">▶ Play</button>
-            <button onclick="pauseVideo()">⏸ Pause</button>
+            <button onclick="togglePlay()">▶/⏸</button>
+            <input type="range" id="seek-bar" value="0">
+            <button onclick="toggleMute()">🔊/🔇</button>
+            <button onclick="toggleFullscreen()">⛶</button>
         </div>
     </div>
 
     <script>
         const video = document.getElementById("ar-video");
+        const cameraFeed = document.getElementById("camera-feed");
+        const seekBar = document.getElementById("seek-bar");
 
-        function playVideo() {
-            video.play();
+        // Ask for camera permission
+        async function startCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                cameraFeed.srcObject = stream;
+            } catch (error) {
+                console.error("Camera access denied:", error);
+            }
         }
 
-        function pauseVideo() {
-            video.pause();
+        startCamera();
+
+        // Play/Pause Function
+        function togglePlay() {
+            if (video.paused) {
+                video.play();
+            } else {
+                video.pause();
+            }
         }
+
+        // Mute/Unmute Function
+        function toggleMute() {
+            video.muted = !video.muted;
+        }
+
+        // Fullscreen Function
+        function toggleFullscreen() {
+            if (video.requestFullscreen) {
+                video.requestFullscreen();
+            }
+        }
+
+        // Seek Bar Update
+        video.addEventListener("timeupdate", () => {
+            seekBar.value = (video.currentTime / video.duration) * 100;
+        });
+
+        seekBar.addEventListener("input", () => {
+            video.currentTime = (seekBar.value / 100) * video.duration;
+        });
+
     </script>
 
 </body>
