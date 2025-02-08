@@ -3,105 +3,107 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebXR AR Video</title>
-    <script type="module">
-        import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.150.1/build/three.module.js';
+    <title>AR Video</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@webxr-polyfill/webxr-polyfill.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three/examples/jsm/libs/motion-controllers.module.js"></script>
+</head>
+<body style="margin: 0; overflow: hidden;">
 
-        let camera, scene, renderer;
-        let video, videoTexture, videoMaterial, videoPlane;
-        let hitTestSource = null;
-        let hitTestSourceRequested = false;
+    <!-- Start AR Button -->
+    <button id="startAR" style="
+        position: absolute; 
+        top: 50%; 
+        left: 50%; 
+        transform: translate(-50%, -50%);
+        padding: 15px 25px; 
+        font-size: 18px; 
+        background: #007bff; 
+        color: white; 
+        border: none; 
+        border-radius: 8px; 
+        cursor: pointer;
+        z-index: 10;">
+        Start AR Video
+    </button>
 
-        async function init() {
-            scene = new THREE.Scene();
-            camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
+    <script>
+        let scene, camera, renderer, xrSession, videoTexture;
 
-            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-            renderer.setPixelRatio(window.devicePixelRatio);
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.xr.enabled = true;
-            document.body.appendChild(renderer.domElement);
-
-            // Create Video Element
-            video = document.createElement('video');
-            video.src = 'https://ar-video.vercel.app/assets/4817-180570037_small.mp4'; // Your video link
-            video.crossOrigin = 'anonymous';
-            video.loop = true;
-            video.muted = false;
-            video.autoplay = false;
-            video.setAttribute('playsinline', '');
-
-            videoTexture = new THREE.VideoTexture(video);
-            videoMaterial = new THREE.MeshBasicMaterial({ map: videoTexture, side: THREE.DoubleSide });
-
-            // Video Plane (Wall placement)
-            const planeGeometry = new THREE.PlaneGeometry(1, 0.6);
-            videoPlane = new THREE.Mesh(planeGeometry, videoMaterial);
-            videoPlane.visible = false;
-            scene.add(videoPlane);
-
-            // Start WebXR Session Automatically
+        async function startAR() {
             if (navigator.xr) {
                 try {
-                    const session = await navigator.xr.requestSession('immersive-ar', {
+                    // Request WebXR AR session
+                    xrSession = await navigator.xr.requestSession('immersive-ar', {
                         requiredFeatures: ['hit-test']
                     });
 
-                    renderer.xr.setSession(session);
-                    startARSession(session);
+                    // Initialize THREE.js scene
+                    setupScene();
+
+                    // Set WebXR session
+                    renderer.xr.setSession(xrSession);
+
                 } catch (err) {
                     console.error('WebXR session failed', err);
                 }
             } else {
                 console.warn('WebXR not supported');
             }
+        }
 
+        function setupScene() {
+            scene = new THREE.Scene();
+
+            // Setup camera
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            scene.add(camera);
+
+            // Setup WebGL renderer
+            renderer = new THREE.WebGLRenderer({ alpha: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.xr.enabled = true;
+            document.body.appendChild(renderer.domElement);
+
+            // Add light
+            const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
+            scene.add(light);
+
+            // Load video texture
+            const video = document.createElement('video');
+            video.src = 'https://ar-video.vercel.app/assets/4817-180570037_small.mp4'; // Update with your video link
+            video.loop = true;
+            video.muted = false;
+            video.play();  // Auto-play
+
+            videoTexture = new THREE.VideoTexture(video);
+            videoTexture.minFilter = THREE.LinearFilter;
+            videoTexture.magFilter = THREE.LinearFilter;
+            videoTexture.format = THREE.RGBAFormat;
+
+            // Create video screen in AR
+            const geometry = new THREE.PlaneGeometry(1.5, 1); // Adjust screen size
+            const material = new THREE.MeshBasicMaterial({ map: videoTexture });
+            const videoScreen = new THREE.Mesh(geometry, material);
+            videoScreen.position.set(0, 1, -2); // Adjust position in AR space
+            scene.add(videoScreen);
+
+            // Render loop
+            function animate() {
+                renderer.setAnimationLoop(() => {
+                    renderer.render(scene, camera);
+                });
+            }
             animate();
         }
 
-        function startARSession(session) {
-            session.requestReferenceSpace('viewer').then(referenceSpace => {
-                session.requestHitTestSource({ space: referenceSpace }).then(source => {
-                    hitTestSource = source;
-                });
-            });
+        // Button Click Event to Start AR
+        document.getElementById('startAR').addEventListener('click', function() {
+            this.style.display = 'none'; // Hide button after click
+            startAR();
+        });
 
-            session.addEventListener('end', () => {
-                video.pause(); // Stop video when AR session ends
-            });
-        }
-
-        function animate() {
-            renderer.setAnimationLoop((timestamp, frame) => {
-                if (frame) {
-                    const session = renderer.xr.getSession();
-                    if (session && hitTestSource) {
-                        const viewerPose = frame.getViewerPose(session.referenceSpace);
-                        if (viewerPose) {
-                            const hitTestResults = frame.getHitTestResults(hitTestSource);
-                            if (hitTestResults.length > 0) {
-                                const hitPose = hitTestResults[0].getPose(session.referenceSpace);
-                                videoPlane.position.set(hitPose.transform.position.x, hitPose.transform.position.y, hitPose.transform.position.z);
-                                videoPlane.lookAt(camera.position);
-                                if (!videoPlane.visible) {
-                                    videoPlane.visible = true;
-                                    video.play();
-                                }
-                            }
-                        }
-                    }
-                }
-                renderer.render(scene, camera);
-            });
-        }
-
-        window.addEventListener('load', init);
     </script>
-
-    <style>
-        body { margin: 0; overflow: hidden; }
-    </style>
-</head>
-<body>
 </body>
 </html>
