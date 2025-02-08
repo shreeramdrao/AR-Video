@@ -3,18 +3,77 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AR Video Player</title>
-    <script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
-    
+    <title>WebXR AR Video Player</title>
+    <script type="module">
+        import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.150.1/build/three.module.js';
+        import { ARButton } from 'https://cdn.jsdelivr.net/npm/three@0.150.1/examples/jsm/webxr/ARButton.js';
+
+        let camera, scene, renderer;
+        let video, videoTexture, videoMaterial, videoPlane;
+        let controller;
+
+        function init() {
+            // Create Scene
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
+            
+            // WebGL Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.xr.enabled = true;
+            document.body.appendChild(renderer.domElement);
+
+            // AR Button
+            document.body.appendChild(ARButton.createButton(renderer, {
+                requiredFeatures: ['hit-test'], // Ensures placement on the ground
+                optionalFeatures: ['dom-overlay'],
+                domOverlay: { root: document.body }
+            }));
+
+            // Create Video Element
+            video = document.createElement('video');
+            video.src = 'https://ar-video.vercel.app/assets/4817-180570037_small.mp4'; // Update with your Vercel video link
+            video.crossOrigin = 'anonymous';
+            video.loop = true;
+            video.muted = false;
+            video.autoplay = false;
+            video.setAttribute('playsinline', '');
+
+            videoTexture = new THREE.VideoTexture(video);
+            videoMaterial = new THREE.MeshBasicMaterial({ map: videoTexture, side: THREE.DoubleSide });
+
+            // Video Plane (Acts like a floating TV screen)
+            const planeGeometry = new THREE.PlaneGeometry(1, 0.6);
+            videoPlane = new THREE.Mesh(planeGeometry, videoMaterial);
+            videoPlane.position.set(0, 1, -2); // Initial position in front of the camera
+            videoPlane.visible = false; // Hide initially until AR starts
+            scene.add(videoPlane);
+
+            // AR Controller for Placement
+            controller = renderer.xr.getController(0);
+            controller.addEventListener('select', onPlaceVideo);
+            scene.add(controller);
+
+            animate();
+        }
+
+        function onPlaceVideo() {
+            videoPlane.visible = true;
+            video.play();
+        }
+
+        function animate() {
+            renderer.setAnimationLoop(() => {
+                renderer.render(scene, camera);
+            });
+        }
+
+        window.addEventListener('load', init);
+    </script>
+
     <style>
         body { margin: 0; overflow: hidden; }
-        model-viewer {
-            width: 100vw;
-            height: 100vh;
-            position: fixed;
-            top: 0;
-            left: 0;
-        }
         .controls {
             position: absolute;
             bottom: 20px;
@@ -35,31 +94,11 @@
 </head>
 <body>
 
-    <model-viewer 
-        ar 
-        ar-modes="webxr scene-viewer quick-look" 
-        camera-controls 
-        disable-tap
-        interaction-prompt="none"
-        shadow-intensity="1" 
-        id="ar-video">
-        
-        <video id="video-texture" src="https://ar-video.vercel.app/assets/4817-180570037_small.mp4" 
-            loop 
-            muted 
-            autoplay 
-            playsinline 
-            style="width: 100%; height: auto;">
-        </video>
-        
-    </model-viewer>
-
     <div class="controls">
         <button id="playPause">Play</button>
     </div>
 
     <script>
-        const video = document.getElementById('video-texture');
         const playPauseBtn = document.getElementById('playPause');
 
         playPauseBtn.addEventListener('click', () => {
