@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebXR AR Video Player</title>
+    <title>WebXR Auto AR Video</title>
     <script type="module">
         import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.150.1/build/three.module.js';
         import { ARButton } from 'https://cdn.jsdelivr.net/npm/three@0.150.1/examples/jsm/webxr/ARButton.js';
@@ -24,12 +24,15 @@
             renderer.xr.enabled = true;
             document.body.appendChild(renderer.domElement);
 
-            // AR Button
-            document.body.appendChild(ARButton.createButton(renderer, {
+            // Create WebXR AR Button (Auto-starts AR)
+            const arButton = ARButton.createButton(renderer, {
                 requiredFeatures: ['hit-test'], // Ensures placement on the ground
                 optionalFeatures: ['dom-overlay'],
                 domOverlay: { root: document.body }
-            }));
+            });
+
+            document.body.appendChild(arButton);
+            arButton.click(); // Auto-start AR
 
             // Create Video Element
             video = document.createElement('video');
@@ -37,8 +40,9 @@
             video.crossOrigin = 'anonymous';
             video.loop = true;
             video.muted = false;
-            video.autoplay = false;
+            video.autoplay = true;
             video.setAttribute('playsinline', '');
+            video.play();
 
             videoTexture = new THREE.VideoTexture(video);
             videoMaterial = new THREE.MeshBasicMaterial({ map: videoTexture, side: THREE.DoubleSide });
@@ -47,7 +51,6 @@
             const planeGeometry = new THREE.PlaneGeometry(1, 0.6);
             videoPlane = new THREE.Mesh(planeGeometry, videoMaterial);
             videoPlane.position.set(0, 1, -2); // Initial position in front of the camera
-            videoPlane.visible = false; // Hide initially until AR starts
             scene.add(videoPlane);
 
             // AR Controller for Placement
@@ -59,7 +62,6 @@
         }
 
         function onPlaceVideo() {
-            videoPlane.visible = true;
             video.play();
         }
 
@@ -74,43 +76,8 @@
 
     <style>
         body { margin: 0; overflow: hidden; }
-        .controls {
-            position: absolute;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            display: flex;
-            gap: 15px;
-        }
-        button {
-            padding: 10px 15px;
-            font-size: 16px;
-            background-color: #333;
-            color: white;
-            border: none;
-            cursor: pointer;
-        }
     </style>
 </head>
 <body>
-
-    <div class="controls">
-        <button id="playPause">Play</button>
-    </div>
-
-    <script>
-        const playPauseBtn = document.getElementById('playPause');
-
-        playPauseBtn.addEventListener('click', () => {
-            if (video.paused) {
-                video.play();
-                playPauseBtn.textContent = "Pause";
-            } else {
-                video.pause();
-                playPauseBtn.textContent = "Play";
-            }
-        });
-    </script>
-
 </body>
 </html>
