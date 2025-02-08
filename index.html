@@ -85,16 +85,23 @@
             videoTexture.magFilter = THREE.LinearFilter;
 
             // Create video plane
-            const geometry = new THREE.PlaneGeometry(2, 1); // Adjust video size
+            const geometry = new THREE.PlaneGeometry(2, 1); // Base size
             const material = new THREE.MeshBasicMaterial({ map: videoTexture });
             videoScreen = new THREE.Mesh(geometry, material);
-            
+
             // Set initial position in AR space
             videoScreen.position.set(0, 1, -3); // X, Y, Z -> Y is height, Z is depth
             scene.add(videoScreen);
 
             function animate() {
                 renderer.setAnimationLoop(() => {
+                    // Get camera distance from video
+                    let distance = camera.position.distanceTo(videoScreen.position);
+
+                    // Scale video size based on distance
+                    let scaleFactor = Math.max(1, 3 / distance); // Adjust scaling formula
+                    videoScreen.scale.set(scaleFactor, scaleFactor, scaleFactor);
+
                     renderer.render(scene, camera);
                 });
             }
