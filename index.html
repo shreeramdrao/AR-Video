@@ -5,9 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AR Video</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@webxr-polyfill/webxr-polyfill.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three/examples/jsm/libs/motion-controllers.module.js"></script>
 </head>
 <body style="margin: 0; overflow: hidden;">
 
@@ -29,27 +26,25 @@
     </button>
 
     <script>
-        let scene, camera, renderer, xrSession, videoTexture;
+        let scene, camera, renderer, videoTexture;
 
         async function startAR() {
-            if (navigator.xr) {
-                try {
-                    // Request WebXR AR session
-                    xrSession = await navigator.xr.requestSession('immersive-ar', {
-                        requiredFeatures: ['hit-test']
-                    });
+            if (!navigator.xr) {
+                alert("WebXR not supported on this device/browser.");
+                return;
+            }
 
-                    // Initialize THREE.js scene
-                    setupScene();
+            try {
+                const session = await navigator.xr.requestSession('immersive-ar', {
+                    requiredFeatures: ['hit-test']
+                });
 
-                    // Set WebXR session
-                    renderer.xr.setSession(xrSession);
+                setupScene();
+                renderer.xr.setSession(session);
 
-                } catch (err) {
-                    console.error('WebXR session failed', err);
-                }
-            } else {
-                console.warn('WebXR not supported');
+            } catch (err) {
+                console.error('WebXR session failed:', err);
+                alert("AR Session failed: " + err.message);
             }
         }
 
@@ -70,26 +65,25 @@
             const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
             scene.add(light);
 
-            // Load video texture
+            // Load video
             const video = document.createElement('video');
             video.src = 'https://ar-video.vercel.app/assets/4817-180570037_small.mp4'; // Update with your video link
             video.loop = true;
             video.muted = false;
-            video.play();  // Auto-play
+            video.autoplay = true;
+            video.play().catch(e => console.error("Video play failed", e));
 
             videoTexture = new THREE.VideoTexture(video);
             videoTexture.minFilter = THREE.LinearFilter;
             videoTexture.magFilter = THREE.LinearFilter;
-            videoTexture.format = THREE.RGBAFormat;
 
             // Create video screen in AR
             const geometry = new THREE.PlaneGeometry(1.5, 1); // Adjust screen size
             const material = new THREE.MeshBasicMaterial({ map: videoTexture });
             const videoScreen = new THREE.Mesh(geometry, material);
-            videoScreen.position.set(0, 1, -2); // Adjust position in AR space
+            videoScreen.position.set(0, 1, -2); // Adjust position
             scene.add(videoScreen);
 
-            // Render loop
             function animate() {
                 renderer.setAnimationLoop(() => {
                     renderer.render(scene, camera);
@@ -98,12 +92,10 @@
             animate();
         }
 
-        // Button Click Event to Start AR
         document.getElementById('startAR').addEventListener('click', function() {
-            this.style.display = 'none'; // Hide button after click
+            this.style.display = 'none';
             startAR();
         });
-
     </script>
 </body>
 </html>
