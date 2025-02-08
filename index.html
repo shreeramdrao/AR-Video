@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebXR Auto Wall-Detected Video</title>
+    <title>WebXR AR Video</title>
     <script type="module">
         import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.150.1/build/three.module.js';
         import { ARButton } from 'https://cdn.jsdelivr.net/npm/three@0.150.1/examples/jsm/webxr/ARButton.js';
@@ -15,31 +15,28 @@
         let xrSession;
 
         function init() {
-            // Create Scene
             scene = new THREE.Scene();
             camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
             
-            // WebGL Renderer
             renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
             renderer.setPixelRatio(window.devicePixelRatio);
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.xr.enabled = true;
             document.body.appendChild(renderer.domElement);
 
-            // Start WebXR AR Session without a button
-            navigator.xr.requestSession('immersive-ar', { requiredFeatures: ['hit-test'] }).then(session => {
-                xrSession = session;
-                renderer.xr.setSession(session);
-                session.requestReferenceSpace('viewer').then(referenceSpace => {
-                    session.requestHitTestSource({ space: referenceSpace }).then(source => {
-                        hitTestSource = source;
-                    });
-                });
+            // Create AR Button (Needed for WebXR)
+            const arButton = ARButton.createButton(renderer, {
+                requiredFeatures: ['hit-test']
             });
+            arButton.style.position = 'absolute';
+            arButton.style.top = '20px';
+            arButton.style.left = '50%';
+            arButton.style.transform = 'translateX(-50%)';
+            document.body.appendChild(arButton);
 
             // Create Video Element
             video = document.createElement('video');
-            video.src = 'https://ar-video.vercel.app/assets/4817-180570037_small.mp4'; // Update with your Vercel video link
+            video.src = 'https://ar-video.vercel.app/assets/4817-180570037_small.mp4'; // Your video link
             video.crossOrigin = 'anonymous';
             video.loop = true;
             video.muted = false;
@@ -49,13 +46,30 @@
             videoTexture = new THREE.VideoTexture(video);
             videoMaterial = new THREE.MeshBasicMaterial({ map: videoTexture, side: THREE.DoubleSide });
 
-            // Video Plane (Acts like a floating TV screen)
+            // Video Plane (Like a floating TV screen)
             const planeGeometry = new THREE.PlaneGeometry(1, 0.6);
             videoPlane = new THREE.Mesh(planeGeometry, videoMaterial);
-            videoPlane.visible = false; // Hidden until wall detected
+            videoPlane.visible = false;
             scene.add(videoPlane);
 
+            renderer.xr.addEventListener('sessionstart', () => {
+                startARSession();
+            });
+
             animate();
+        }
+
+        function startARSession() {
+            const session = renderer.xr.getSession();
+            session.requestReferenceSpace('viewer').then(referenceSpace => {
+                session.requestHitTestSource({ space: referenceSpace }).then(source => {
+                    hitTestSource = source;
+                });
+            });
+
+            session.addEventListener('end', () => {
+                video.pause(); // Stop video when AR session ends
+            });
         }
 
         function animate() {
@@ -72,7 +86,7 @@
                                 videoPlane.lookAt(camera.position);
                                 if (!videoPlane.visible) {
                                     videoPlane.visible = true;
-                                    video.play(); // Start video only when wall is detected
+                                    video.play();
                                 }
                             }
                         }
