@@ -6,33 +6,21 @@
     <title>WebXR AR Video</title>
     <script type="module">
         import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.150.1/build/three.module.js';
-        import { ARButton } from 'https://cdn.jsdelivr.net/npm/three@0.150.1/examples/jsm/webxr/ARButton.js';
 
         let camera, scene, renderer;
         let video, videoTexture, videoMaterial, videoPlane;
         let hitTestSource = null;
         let hitTestSourceRequested = false;
-        let xrSession;
 
-        function init() {
+        async function init() {
             scene = new THREE.Scene();
             camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
-            
+
             renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
             renderer.setPixelRatio(window.devicePixelRatio);
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.xr.enabled = true;
             document.body.appendChild(renderer.domElement);
-
-            // Create AR Button (Needed for WebXR)
-            const arButton = ARButton.createButton(renderer, {
-                requiredFeatures: ['hit-test']
-            });
-            arButton.style.position = 'absolute';
-            arButton.style.top = '20px';
-            arButton.style.left = '50%';
-            arButton.style.transform = 'translateX(-50%)';
-            document.body.appendChild(arButton);
 
             // Create Video Element
             video = document.createElement('video');
@@ -46,21 +34,32 @@
             videoTexture = new THREE.VideoTexture(video);
             videoMaterial = new THREE.MeshBasicMaterial({ map: videoTexture, side: THREE.DoubleSide });
 
-            // Video Plane (Like a floating TV screen)
+            // Video Plane (Wall placement)
             const planeGeometry = new THREE.PlaneGeometry(1, 0.6);
             videoPlane = new THREE.Mesh(planeGeometry, videoMaterial);
             videoPlane.visible = false;
             scene.add(videoPlane);
 
-            renderer.xr.addEventListener('sessionstart', () => {
-                startARSession();
-            });
+            // Start WebXR Session Automatically
+            if (navigator.xr) {
+                try {
+                    const session = await navigator.xr.requestSession('immersive-ar', {
+                        requiredFeatures: ['hit-test']
+                    });
+
+                    renderer.xr.setSession(session);
+                    startARSession(session);
+                } catch (err) {
+                    console.error('WebXR session failed', err);
+                }
+            } else {
+                console.warn('WebXR not supported');
+            }
 
             animate();
         }
 
-        function startARSession() {
-            const session = renderer.xr.getSession();
+        function startARSession(session) {
             session.requestReferenceSpace('viewer').then(referenceSpace => {
                 session.requestHitTestSource({ space: referenceSpace }).then(source => {
                     hitTestSource = source;
