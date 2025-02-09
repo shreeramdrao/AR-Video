@@ -3,11 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Advanced AR Video</title>
+    <title>AR Video in WebXR</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body style="margin: 0; overflow: hidden;">
-    
+
     <!-- Start AR Button -->
     <button id="startAR" style="
         position: absolute;
@@ -27,7 +27,7 @@
 
     <script>
         let scene, camera, renderer, videoTexture, videoScreen;
-        let xrSession, xrRefSpace, anchor;
+        let xrSession, xrRefSpace, hitTestSource;
 
         async function startAR() {
             if (!navigator.xr) {
@@ -49,10 +49,10 @@
                 });
 
                 const viewerSpace = await xrSession.requestReferenceSpace('viewer');
-                const hitTestSource = await xrSession.requestHitTestSource({ space: viewerSpace });
+                hitTestSource = await xrSession.requestHitTestSource({ space: viewerSpace });
 
                 xrSession.addEventListener("select", (event) => {
-                    placeVideoInAR(event, hitTestSource);
+                    placeVideoInAR(event);
                 });
 
             } catch (err) {
@@ -84,17 +84,17 @@
             video.loop = true;
             video.muted = false;
             video.autoplay = true;
-            video.play().then(() => {
-                console.log("Video started playing.");
-            }).catch(e => console.error("Video play failed", e));
+            video.setAttribute("playsinline", ""); // Ensures proper playback on mobile
+            video.play().catch(e => console.error("Video play failed", e));
 
             videoTexture = new THREE.VideoTexture(video);
             videoTexture.minFilter = THREE.LinearFilter;
             videoTexture.magFilter = THREE.LinearFilter;
+            videoTexture.needsUpdate = true;
 
             // Create video plane
             const geometry = new THREE.PlaneGeometry(2, 1); // Adjust video size
-            const material = new THREE.MeshBasicMaterial({ map: videoTexture });
+            const material = new THREE.MeshBasicMaterial({ map: videoTexture, side: THREE.DoubleSide });
             videoScreen = new THREE.Mesh(geometry, material);
 
             // Initially hidden, will be placed in AR
@@ -112,7 +112,7 @@
             animate();
         }
 
-        function placeVideoInAR(event, hitTestSource) {
+        function placeVideoInAR(event) {
             const frame = event.frame;
             const hitTestResults = frame.getHitTestResults(hitTestSource);
 
