@@ -3,53 +3,42 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AR Video Player</title>
+    <title>AR Video Dual Mode</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body style="margin: 0; overflow: hidden;">
 
-    <!-- UI for Video Type Selection -->
-    <div id="videoSelection" style="
-        position: absolute; 
-        top: 50%; 
-        left: 50%; 
-        transform: translate(-50%, -50%);
-        display: flex;
-        gap: 20px;
-    ">
-        <button onclick="startAR('reel')" style="padding: 15px; font-size: 16px;">Reel Video</button>
-        <button onclick="startAR('horizontal')" style="padding: 15px; font-size: 16px;">Horizontal Video</button>
+    <!-- UI Controls -->
+    <div style="position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 10;">
+        <button id="startAR">Start AR</button>
+        <button id="toggleMode">Toggle Video Mode</button>
     </div>
 
     <script>
-        let scene, camera, renderer, videoTexture, videoScreen;
-        
-        async function startAR(type) {
-            document.getElementById('videoSelection').style.display = 'none';
-            
+        let scene, camera, renderer, videoTexture, videoScreen, mode = 'horizontal';
+
+        async function startAR() {
             if (!navigator.xr) {
                 alert("WebXR not supported on this device/browser.");
                 return;
             }
 
             try {
-                const session = await navigator.xr.requestSession('immersive-ar', {
-                    requiredFeatures: ['local-floor']
-                });
-                
-                setupScene(type);
+                const session = await navigator.xr.requestSession('immersive-ar', { requiredFeatures: ['local-floor'] });
+                setupScene();
                 renderer.xr.setSession(session);
-                
+
                 session.requestReferenceSpace('local-floor').then(referenceSpace => {
                     renderer.xr.setReferenceSpace(referenceSpace);
                 });
+
             } catch (err) {
                 console.error('WebXR session failed:', err);
                 alert("AR Session failed: " + err.message);
             }
         }
 
-        function setupScene(type) {
+        function setupScene() {
             scene = new THREE.Scene();
             camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
             scene.add(camera);
@@ -62,29 +51,8 @@
             const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
             scene.add(light);
 
-            const video = document.createElement('video');
-            video.src = type === 'reel' 
-                ? 'https://ar-video2.vercel.app/assets/videoplayback.mp4' 
-                : 'https://ar-video.vercel.app/assets/videoplayback.mp4';
-            video.loop = true;
-            video.muted = false;
-            video.autoplay = true;
-            
-            video.play().catch(e => console.error("Video play failed", e));
-
-            videoTexture = new THREE.VideoTexture(video);
-            videoTexture.minFilter = THREE.LinearFilter;
-            videoTexture.magFilter = THREE.LinearFilter;
-
-            const aspectRatio = type === 'reel' ? [1, 2] : [2, 1];
-            const geometry = new THREE.PlaneGeometry(...aspectRatio);
-            const material = new THREE.MeshBasicMaterial({ map: videoTexture });
-            videoScreen = new THREE.Mesh(geometry, material);
-            
-            videoScreen.position.set(0, 1, -3);
-            scene.add(videoScreen);
-
-            addInteractions();
+            loadVideo();
+            setupControls();
 
             function animate() {
                 renderer.setAnimationLoop(() => {
@@ -94,38 +62,65 @@
             animate();
         }
 
-        function addInteractions() {
-            let isDragging = false;
-            let previousTouchX = 0;
-            let previousTouchY = 0;
+        function loadVideo() {
+            const video = document.createElement('video');
+            video.src = mode === 'horizontal' ? 'https://ar-video.vercel.app/assets/videoplayback.mp4' : 'https://ar-video2.vercel.app/assets/videoplayback.mp4';
+            video.loop = true;
+            video.muted = false;
+            video.autoplay = true;
 
-            window.addEventListener("wheel", (event) => {
-                videoScreen.position.z += event.deltaY * 0.01;
+            video.play().then(() => console.log("Video started playing.")).catch(e => console.error("Video play failed", e));
+            
+            videoTexture = new THREE.VideoTexture(video);
+            videoTexture.minFilter = THREE.LinearFilter;
+            videoTexture.magFilter = THREE.LinearFilter;
+
+            const geometry = mode === 'horizontal' ? new THREE.PlaneGeometry(2, 1) : new THREE.PlaneGeometry(1, 2);
+            const material = new THREE.MeshBasicMaterial({ map: videoTexture });
+            
+            if (videoScreen) scene.remove(videoScreen);
+            videoScreen = new THREE.Mesh(geometry, material);
+            videoScreen.position.set(0, 1, -3);
+            scene.add(videoScreen);
+        }
+
+        function setupControls() {
+            let dragging = false;
+            let lastX = 0, lastY = 0;
+
+            window.addEventListener('wheel', (event) => {
+                videoScreen.position.z += event.deltaY * 0.005;
             });
 
-            window.addEventListener("touchstart", (event) => {
-                isDragging = true;
-                previousTouchX = event.touches[0].clientX;
-                previousTouchY = event.touches[0].clientY;
+            window.addEventListener('mousedown', (event) => {
+                dragging = true;
+                lastX = event.clientX;
+                lastY = event.clientY;
             });
 
-            window.addEventListener("touchmove", (event) => {
-                if (!isDragging) return;
-                
-                let deltaX = event.touches[0].clientX - previousTouchX;
-                let deltaY = event.touches[0].clientY - previousTouchY;
-                
-                videoScreen.position.x += deltaX * 0.01;
-                videoScreen.position.y -= deltaY * 0.01;
-                
-                previousTouchX = event.touches[0].clientX;
-                previousTouchY = event.touches[0].clientY;
-            });
+            window.addEventListener('mouseup', () => dragging = false);
 
-            window.addEventListener("touchend", () => {
-                isDragging = false;
+            window.addEventListener('mousemove', (event) => {
+                if (dragging) {
+                    let deltaX = (event.clientX - lastX) * 0.01;
+                    let deltaY = (event.clientY - lastY) * 0.01;
+                    videoScreen.position.x += deltaX;
+                    videoScreen.position.y -= deltaY;
+                    lastX = event.clientX;
+                    lastY = event.clientY;
+                }
             });
         }
+
+        document.getElementById('startAR').addEventListener('click', () => {
+            document.getElementById('startAR').style.display = 'none';
+            startAR();
+        });
+
+        document.getElementById('toggleMode').addEventListener('click', () => {
+            mode = (mode === 'horizontal') ? 'reel' : 'horizontal';
+            loadVideo();
+        });
     </script>
 </body>
 </html>
