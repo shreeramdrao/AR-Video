@@ -3,19 +3,31 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AR Video Dual Mode</title>
+    <title>Advanced AR Video</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body style="margin: 0; overflow: hidden;">
-
-    <!-- UI Controls -->
-    <div style="position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 10;">
-        <button id="startAR">Start AR</button>
-        <button id="toggleMode">Toggle Video Mode</button>
-    </div>
+    
+    <!-- Start AR Button -->
+    <button id="startAR" style="
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        padding: 15px 25px;
+        font-size: 18px;
+        background: #007bff;
+        color: white;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        z-index: 10;">
+        Start AR Video
+    </button>
 
     <script>
-        let scene, camera, renderer, videoTexture, videoScreen, mode = 'horizontal';
+        let scene, camera, renderer, videoTexture, videoScreen;
+        let xrSession, xrRefSpace, anchor;
 
         async function startAR() {
             if (!navigator.xr) {
@@ -24,12 +36,23 @@
             }
 
             try {
-                const session = await navigator.xr.requestSession('immersive-ar', { requiredFeatures: ['local-floor'] });
-                setupScene();
-                renderer.xr.setSession(session);
+                xrSession = await navigator.xr.requestSession('immersive-ar', {
+                    requiredFeatures: ['local-floor', 'hit-test']
+                });
 
-                session.requestReferenceSpace('local-floor').then(referenceSpace => {
-                    renderer.xr.setReferenceSpace(referenceSpace);
+                setupScene();
+                renderer.xr.setSession(xrSession);
+
+                xrSession.requestReferenceSpace('local-floor').then(refSpace => {
+                    xrRefSpace = refSpace;
+                    renderer.xr.setReferenceSpace(xrRefSpace);
+                });
+
+                const viewerSpace = await xrSession.requestReferenceSpace('viewer');
+                const hitTestSource = await xrSession.requestHitTestSource({ space: viewerSpace });
+
+                xrSession.addEventListener("select", (event) => {
+                    placeVideoInAR(event, hitTestSource);
                 });
 
             } catch (err) {
@@ -40,86 +63,93 @@
 
         function setupScene() {
             scene = new THREE.Scene();
+
+            // Setup camera
             camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
             scene.add(camera);
 
+            // Setup WebGL renderer
             renderer = new THREE.WebGLRenderer({ alpha: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.xr.enabled = true;
             document.body.appendChild(renderer.domElement);
 
+            // Add light
             const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
             scene.add(light);
 
-            loadVideo();
-            setupControls();
+            // Load video
+            const video = document.createElement('video');
+            video.src = 'https://ar-video.vercel.app/assets/4817-180570037_small.mp4'; // Your video URL
+            video.loop = true;
+            video.muted = false;
+            video.autoplay = true;
+            video.play().then(() => {
+                console.log("Video started playing.");
+            }).catch(e => console.error("Video play failed", e));
+
+            videoTexture = new THREE.VideoTexture(video);
+            videoTexture.minFilter = THREE.LinearFilter;
+            videoTexture.magFilter = THREE.LinearFilter;
+
+            // Create video plane
+            const geometry = new THREE.PlaneGeometry(2, 1); // Adjust video size
+            const material = new THREE.MeshBasicMaterial({ map: videoTexture });
+            videoScreen = new THREE.Mesh(geometry, material);
+
+            // Initially hidden, will be placed in AR
+            videoScreen.visible = false;
+            scene.add(videoScreen);
 
             function animate() {
-                renderer.setAnimationLoop(() => {
+                renderer.setAnimationLoop((time, frame) => {
+                    if (frame) {
+                        adjustVideoPosition(frame);
+                    }
                     renderer.render(scene, camera);
                 });
             }
             animate();
         }
 
-        function loadVideo() {
-            const video = document.createElement('video');
-            video.src = mode === 'horizontal' ? 'https://ar-video.vercel.app/assets/videoplayback.mp4' : 'https://ar-video2.vercel.app/assets/videoplayback.mp4';
-            video.loop = true;
-            video.muted = false;
-            video.autoplay = true;
+        function placeVideoInAR(event, hitTestSource) {
+            const frame = event.frame;
+            const hitTestResults = frame.getHitTestResults(hitTestSource);
 
-            video.play().then(() => console.log("Video started playing.")).catch(e => console.error("Video play failed", e));
-            
-            videoTexture = new THREE.VideoTexture(video);
-            videoTexture.minFilter = THREE.LinearFilter;
-            videoTexture.magFilter = THREE.LinearFilter;
+            if (hitTestResults.length > 0) {
+                const hit = hitTestResults[0];
 
-            const geometry = mode === 'horizontal' ? new THREE.PlaneGeometry(2, 1) : new THREE.PlaneGeometry(1, 2);
-            const material = new THREE.MeshBasicMaterial({ map: videoTexture });
-            
-            if (videoScreen) scene.remove(videoScreen);
-            videoScreen = new THREE.Mesh(geometry, material);
-            videoScreen.position.set(0, 1, -3);
-            scene.add(videoScreen);
+                // Use the hit position for video placement
+                videoScreen.position.set(hit.transform.position.x, hit.transform.position.y, hit.transform.position.z);
+                videoScreen.visible = true;
+            }
         }
 
-        function setupControls() {
-            let dragging = false;
-            let lastX = 0, lastY = 0;
+        function adjustVideoPosition(frame) {
+            if (!videoScreen || !frame) return;
 
-            window.addEventListener('wheel', (event) => {
-                videoScreen.position.z += event.deltaY * 0.005;
-            });
+            const viewerPose = frame.getViewerPose(xrRefSpace);
+            if (!viewerPose) return;
 
-            window.addEventListener('mousedown', (event) => {
-                dragging = true;
-                lastX = event.clientX;
-                lastY = event.clientY;
-            });
+            const userPosition = viewerPose.transform.position;
+            const videoPosition = videoScreen.position;
 
-            window.addEventListener('mouseup', () => dragging = false);
+            // Calculate distance
+            const distance = Math.sqrt(
+                (userPosition.x - videoPosition.x) ** 2 +
+                (userPosition.y - videoPosition.y) ** 2 +
+                (userPosition.z - videoPosition.z) ** 2
+            );
 
-            window.addEventListener('mousemove', (event) => {
-                if (dragging) {
-                    let deltaX = (event.clientX - lastX) * 0.01;
-                    let deltaY = (event.clientY - lastY) * 0.01;
-                    videoScreen.position.x += deltaX;
-                    videoScreen.position.y -= deltaY;
-                    lastX = event.clientX;
-                    lastY = event.clientY;
-                }
-            });
+            // Adjust scale and position for depth effect
+            const scale = Math.max(1, 3 - distance * 0.5);
+            videoScreen.scale.set(scale, scale, 1);
+            videoScreen.position.z = videoPosition.z + (3 - distance) * 0.5;
         }
 
-        document.getElementById('startAR').addEventListener('click', () => {
-            document.getElementById('startAR').style.display = 'none';
+        document.getElementById('startAR').addEventListener('click', function() {
+            this.style.display = 'none';
             startAR();
-        });
-
-        document.getElementById('toggleMode').addEventListener('click', () => {
-            mode = (mode === 'horizontal') ? 'reel' : 'horizontal';
-            loadVideo();
         });
     </script>
 </body>
